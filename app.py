@@ -1,6 +1,7 @@
+import json
 import sqlite3
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 
 app = Flask(__name__)
 
@@ -29,6 +30,15 @@ conn.commit()
 c.close()
 
 
+def to_response(data, message, http_code):
+    response = {
+        "result": data,
+        "error": None,
+        "message": message
+    }
+    return Response(json.dumps(response), status=http_code, mimetype='application/json')
+
+
 @app.route('/')
 def hello_world():
     return 'Hello World!'
@@ -36,7 +46,19 @@ def hello_world():
 
 @app.route('/api/v1/todos', methods=['GET'])
 def get_todo_list():
-    return jsonify(todos)
+    c1 = conn.cursor()
+    query = "select * from todos"
+    c1.execute(query)
+    results = c1.fetchall()
+    print(results)
+    todo_list = []
+    for result in results:
+        todo_list.append({
+            "id": result[0],
+            "title": result[1],
+            "completed": result[2]
+        })
+    return to_response(todo_list, "todo loaded", 200)
 
 
 @app.route('/api/v1/todos/<int:id>', methods=['GET'])
@@ -50,13 +72,11 @@ def get_todo_by_id(id):
         "title": result[1],
         "completed": result[2]
     }
-    return jsonify(founded_todo)
+    return to_response(founded_todo, "", 200)
 
 
 @app.route('/api/v1/todos', methods=['POST'])
 def create_todo():
-    print(request.json)
-    str(request.json["completed"])
     query = "insert into todos ('title', 'completed') values (:title, :completed)"
     c1 = conn.cursor()
     c1.execute(query, {"title": request.json["title"], "completed": request.json["completed"]})
@@ -64,17 +84,25 @@ def create_todo():
 
     request.json["id"] = c1.lastrowid
 
-    return jsonify(request.json)
+    return get_todo_by_id(c1.lastrowid)
 
 
 @app.route('/api/v1/todos/<int:id>', methods=['PUT'])
 def update_todo_by_id(id):
-    return str(request.json["completed"])
+    query = "update todos set 'title' = :title, 'completed' = :completed where id = :id"
+    c1 = conn.cursor()
+    c1.execute(query, {"title": request.json["title"], "completed": request.json["completed"], "id": id})
+    conn.commit()
+    return get_todo_by_id(id)
 
 
 @app.route('/api/v1/todos/<int:id>', methods=['DELETE'])
 def delete_todo_by_id(id):
-    return str(id)
+    query = "delete from todos  where id = :id"
+    c1 = conn.cursor()
+    c1.execute(query, {"title": request.json["title"], "completed": request.json["completed"], "id": id})
+    conn.commit()
+    return get_todo_by_id(id)
 
 
 if __name__ == '__main__':
